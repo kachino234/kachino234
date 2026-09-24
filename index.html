@@ -5,18 +5,32 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Routinery — Daily Routine Builder</title>
 <link rel="stylesheet" href="styles.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 </head>
 <body>
 <div id="app">
 
   <header class="topbar">
     <h1 id="topbarTitle">Routines</h1>
+    <button id="signOutBtn" class="icon-btn hidden" title="Sign out">⎋</button>
   </header>
 
   <main id="views">
 
+    <!-- AUTH VIEW -->
+    <section id="view-auth" class="view">
+      <div class="auth-card">
+        <h2>Sign in</h2>
+        <p class="auth-hint">We'll email you a magic link — no password needed.</p>
+        <label>Email</label>
+        <input id="authEmailInput" type="email" placeholder="you@example.com">
+        <button id="authSendBtn" class="primary-btn">Send Magic Link</button>
+        <p id="authStatus" class="auth-status"></p>
+      </div>
+    </section>
+
     <!-- ROUTINES LIST VIEW -->
-    <section id="view-routines" class="view active">
+    <section id="view-routines" class="view">
       <div id="routineList" class="routine-list"></div>
       <p id="emptyState" class="empty-state">No routines yet. Tap + to build your first routine — morning, night, workout, study, anything.</p>
       <button id="addRoutineBtn" class="fab" title="New routine">+</button>
@@ -114,6 +128,7 @@
   </div>
 
 </div>
+<script src="config.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

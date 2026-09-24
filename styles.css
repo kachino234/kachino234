@@ -30,7 +30,7 @@ body {
   position: relative;
 }
 
-.topbar { padding: 20px 20px 12px; }
+.topbar { padding: 20px 20px 12px; display: flex; align-items: center; justify-content: space-between; }
 .topbar h1 { margin: 0; font-size: 26px; font-weight: 800; }
 
 #views { flex: 1; position: relative; padding: 0 16px 24px; }
@@ -246,5 +246,28 @@ body {
 
 .modal-actions { display: flex; gap: 10px; margin-top: 20px; }
 .modal-actions button { flex: 1; margin-bottom: 0; }
+
+/* AUTH */
+.auth-card {
+  margin-top: 60px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 24px 20px;
+}
+.auth-card h2 { margin-top: 0; }
+.auth-hint { color: var(--text-dim); font-size: 14px; margin-bottom: 18px; }
+.auth-card label { display: block; font-size: 13px; color: var(--text-dim); margin-bottom: 4px; }
+.auth-card input {
+  width: 100%;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 10px;
+  padding: 12px;
+  font-size: 16px;
+  margin-bottom: 16px;
+}
+.auth-status { color: var(--accent-2); font-size: 14px; min-height: 20px; margin: 12px 0 0; text-align: center; }
 
 .hidden { display: none !important; }

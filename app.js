@@ -1,39 +1,23 @@
 (() => {
   "use strict";
 
-  const STORAGE_KEY = "routinery_routines_v2";
   const ICONS = ["☀️", "🌙", "💪", "🧘", "📚", "💧", "🪥", "☕", "🧴", "📝", "🏃", "🍳", "🧹", "💼", "🎯"];
   const RING_CIRCUMFERENCE = 2 * Math.PI * 54;
 
-  /** @typedef {{id:string,name:string,type:'timer'|'checklist',duration:number}} Step */
-  /** @typedef {{id:string,name:string,icon:string,steps:Step[]}} Routine */
+  const sb = window.supabase.createClient(window.SUPABASE_URL, window.SUPABASE_ANON_KEY);
 
-  let routines = loadRoutines();
+  /** @typedef {{id:string,name:string,type:'timer'|'checklist',duration:number,position:number}} Step */
+  /** @typedef {{id:string,name:string,icon:string,position:number,steps:Step[]}} Routine */
+
+  let routines = [];
   let editingRoutineId = null;
   let editingStepId = null; // null = new step
-  let selectedIcon = ICONS[0];
   let selectedStepType = "timer";
+  let currentUser = null;
 
   let session = null;
-  /*
-  session = {
-    routine, currentIndex, startTime, elapsedTimer,
-    stepRemaining, stepDuration, stepTimer, paused, completedSteps
-  }
-  */
 
-  // ---------- Persistence ----------
-  function loadRoutines() {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      return raw ? JSON.parse(raw) : [];
-    } catch (e) {
-      return [];
-    }
-  }
-  function saveRoutines() {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(routines));
-  }
+  // ---------- Helpers ----------
   function uid() {
     return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
   }
@@ -48,8 +32,6 @@
     const s = Math.floor(totalSeconds % 60).toString().padStart(2, "0");
     return `${m}:${s}`;
   }
-
-  // ---------- View management ----------
   function showView(id) {
     document.querySelectorAll(".view").forEach(v => v.classList.remove("active"));
     document.getElementById(id).classList.add("active");
@@ -57,6 +39,122 @@
   document.querySelectorAll("[data-back]").forEach(btn => {
     btn.addEventListener("click", () => showView(btn.dataset.back));
   });
+
+  // ---------- Auth ----------
+  const authEmailInput = document.getElementById("authEmailInput");
+  const authStatus = document.getElementById("authStatus");
+  const signOutBtn = document.getElementById("signOutBtn");
+
+  document.getElementById("authSendBtn").addEventListener("click", async () => {
+    const email = authEmailInput.value.trim();
+    if (!email) { authStatus.textContent = "Enter a valid email."; return; }
+    authStatus.textContent = "Sending...";
+    const { error } = await sb.auth.signInWithOtp({
+      email,
+      options: { emailRedirectTo: window.location.href },
+    });
+    authStatus.textContent = error ? `Error: ${error.message}` : "Check your email for the magic link.";
+  });
+
+  signOutBtn.addEventListener("click", async () => {
+    await sb.auth.signOut();
+  });
+
+  sb.auth.onAuthStateChange((_event, sess) => {
+    currentUser = sess ? sess.user : null;
+    signOutBtn.classList.toggle("hidden", !currentUser);
+    if (currentUser) {
+      loadRoutines().then(() => {
+        renderRoutineList();
+        showView("view-routines");
+      });
+    } else {
+      routines = [];
+      showView("view-auth");
+    }
+  });
+
+  // ---------- Data layer (Supabase) ----------
+  async function loadRoutines() {
+    const { data: routineRows, error: rErr } = await sb
+      .from("routines")
+      .select("*")
+      .order("position", { ascending: true });
+    if (rErr) { alert("Failed to load routines: " + rErr.message); return; }
+
+    const { data: stepRows, error: sErr } = await sb
+      .from("steps")
+      .select("*")
+      .order("position", { ascending: true });
+    if (sErr) { alert("Failed to load steps: " + sErr.message); return; }
+
+    routines = routineRows.map(r => ({
+      id: r.id,
+      name: r.name,
+      icon: r.icon,
+      position: r.position,
+      steps: stepRows
+        .filter(s => s.routine_id === r.id)
+        .map(s => ({ id: s.id, name: s.name, type: s.type, duration: s.duration, position: s.position })),
+    }));
+  }
+
+  async function dbCreateRoutine() {
+    const position = routines.length;
+    const { data, error } = await sb
+      .from("routines")
+      .insert({ user_id: currentUser.id, name: "", icon: ICONS[0], position })
+      .select()
+      .single();
+    if (error) { alert("Failed to create routine: " + error.message); return null; }
+    return { id: data.id, name: data.name, icon: data.icon, position: data.position, steps: [] };
+  }
+
+  async function dbUpdateRoutine(id, patch) {
+    const { error } = await sb.from("routines").update(patch).eq("id", id);
+    if (error) alert("Failed to save routine: " + error.message);
+  }
+
+  async function dbDeleteRoutine(id) {
+    const { error } = await sb.from("routines").delete().eq("id", id);
+    if (error) alert("Failed to delete routine: " + error.message);
+  }
+
+  async function dbCreateStep(routineId, step) {
+    const { data, error } = await sb
+      .from("steps")
+      .insert({
+        routine_id: routineId,
+        name: step.name,
+        type: step.type,
+        duration: step.duration,
+        position: step.position,
+      })
+      .select()
+      .single();
+    if (error) { alert("Failed to add step: " + error.message); return null; }
+    return { id: data.id, name: data.name, type: data.type, duration: data.duration, position: data.position };
+  }
+
+  async function dbUpdateStep(id, patch) {
+    const { error } = await sb.from("steps").update(patch).eq("id", id);
+    if (error) alert("Failed to save step: " + error.message);
+  }
+
+  async function dbDeleteStep(id) {
+    const { error } = await sb.from("steps").delete().eq("id", id);
+    if (error) alert("Failed to delete step: " + error.message);
+  }
+
+  async function dbSwapStepPositions(stepA, stepB) {
+    const posA = stepA.position, posB = stepB.position;
+    stepA.position = posB;
+    stepB.position = posA;
+    await Promise.all([
+      dbUpdateStep(stepA.id, { position: posB }),
+      dbUpdateStep(stepB.id, { position: posA }),
+    ]);
+  }
 
   // ---------- Routines list ----------
   const routineListEl = document.getElementById("routineList");
@@ -84,10 +182,10 @@
     });
   }
 
-  document.getElementById("addRoutineBtn").addEventListener("click", () => {
-    const r = { id: uid(), name: "", icon: ICONS[0], steps: [] };
+  document.getElementById("addRoutineBtn").addEventListener("click", async () => {
+    const r = await dbCreateRoutine();
+    if (!r) return;
     routines.push(r);
-    saveRoutines();
     openEditor(r.id);
   });
 
@@ -96,6 +194,7 @@
   const stepListEl = document.getElementById("stepList");
   const iconPickerEl = document.getElementById("iconPicker");
   const editorTotalTimeEl = document.getElementById("editorTotalTime");
+  let nameSaveTimer = null;
 
   function currentRoutine() {
     return routines.find(r => r.id === editingRoutineId);
@@ -111,8 +210,8 @@
       btn.className = icon === (r && r.icon) ? "selected" : "";
       btn.addEventListener("click", () => {
         r.icon = icon;
-        saveRoutines();
         renderIconPicker();
+        dbUpdateRoutine(r.id, { icon });
       });
       iconPickerEl.appendChild(btn);
     });
@@ -131,7 +230,8 @@
     const r = currentRoutine();
     if (!r) return;
     r.name = routineNameInput.value;
-    saveRoutines();
+    clearTimeout(nameSaveTimer);
+    nameSaveTimer = setTimeout(() => dbUpdateRoutine(r.id, { name: r.name }), 400);
   });
 
   function renderStepList() {
@@ -155,22 +255,22 @@
           <button data-action="delete" title="Delete">✕</button>
         </div>`;
       card.querySelector('[data-action="edit"]').addEventListener("click", () => openStepModal(step.id));
-      card.querySelector('[data-action="delete"]').addEventListener("click", () => {
+      card.querySelector('[data-action="delete"]').addEventListener("click", async () => {
         r.steps.splice(idx, 1);
-        saveRoutines();
         renderStepList();
+        await dbDeleteStep(step.id);
       });
-      card.querySelector('[data-action="up"]').addEventListener("click", () => {
+      card.querySelector('[data-action="up"]').addEventListener("click", async () => {
         if (idx === 0) return;
         [r.steps[idx - 1], r.steps[idx]] = [r.steps[idx], r.steps[idx - 1]];
-        saveRoutines();
         renderStepList();
+        await dbSwapStepPositions(r.steps[idx - 1], r.steps[idx]);
       });
-      card.querySelector('[data-action="down"]').addEventListener("click", () => {
+      card.querySelector('[data-action="down"]').addEventListener("click", async () => {
         if (idx === r.steps.length - 1) return;
         [r.steps[idx + 1], r.steps[idx]] = [r.steps[idx], r.steps[idx + 1]];
-        saveRoutines();
         renderStepList();
+        await dbSwapStepPositions(r.steps[idx], r.steps[idx + 1]);
       });
       stepListEl.appendChild(card);
     });
@@ -180,13 +280,14 @@
       : "";
   }
 
-  document.getElementById("deleteRoutineBtn").addEventListener("click", () => {
+  document.getElementById("deleteRoutineBtn").addEventListener("click", async () => {
     if (!editingRoutineId) return;
     if (!confirm("Delete this routine?")) return;
-    routines = routines.filter(r => r.id !== editingRoutineId);
-    saveRoutines();
+    const id = editingRoutineId;
+    routines = routines.filter(r => r.id !== id);
     renderRoutineList();
     showView("view-routines");
+    await dbDeleteRoutine(id);
   });
 
   document.getElementById("startRoutineBtn").addEventListener("click", () => {
@@ -241,22 +342,28 @@
     stepModal.classList.add("hidden");
   });
 
-  document.getElementById("stepSaveBtn").addEventListener("click", () => {
+  document.getElementById("stepSaveBtn").addEventListener("click", async () => {
     const name = stepNameInput.value.trim();
     if (!name) { alert("Step name is required."); return; }
     const mins = Math.max(0, parseInt(stepMinInput.value, 10) || 0);
     const secs = Math.max(0, Math.min(59, parseInt(stepSecInput.value, 10) || 0));
     const duration = selectedStepType === "timer" ? Math.max(1, mins * 60 + secs) : 0;
     const r = currentRoutine();
+    stepModal.classList.add("hidden");
+
     if (editingStepId) {
       const step = r.steps.find(s => s.id === editingStepId);
       Object.assign(step, { name, type: selectedStepType, duration });
+      renderStepList();
+      await dbUpdateStep(step.id, { name, type: selectedStepType, duration });
     } else {
-      r.steps.push({ id: uid(), name, type: selectedStepType, duration });
+      const position = r.steps.length;
+      const newStep = await dbCreateStep(r.id, { name, type: selectedStepType, duration, position });
+      if (newStep) {
+        r.steps.push(newStep);
+        renderStepList();
+      }
     }
-    saveRoutines();
-    renderStepList();
-    stepModal.classList.add("hidden");
   });
 
   // ---------- Session runner ----------
@@ -395,6 +502,15 @@
   });
 
   // ---------- Init ----------
-  renderRoutineList();
-  showView("view-routines");
+  showView("view-auth");
+  sb.auth.getSession().then(({ data }) => {
+    currentUser = data.session ? data.session.user : null;
+    signOutBtn.classList.toggle("hidden", !currentUser);
+    if (currentUser) {
+      loadRoutines().then(() => {
+        renderRoutineList();
+        showView("view-routines");
+      });
+    }
+  });
 })();
