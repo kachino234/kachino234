@@ -3,13 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Routinery — Workout Routine Builder</title>
+<title>Routinery — Daily Routine Builder</title>
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
 <div id="app">
 
-  <!-- Bottom nav shell -->
   <header class="topbar">
     <h1 id="topbarTitle">Routines</h1>
   </header>
@@ -19,7 +18,7 @@
     <!-- ROUTINES LIST VIEW -->
     <section id="view-routines" class="view active">
       <div id="routineList" class="routine-list"></div>
-      <p id="emptyState" class="empty-state">No routines yet. Tap + to create your first workout routine.</p>
+      <p id="emptyState" class="empty-state">No routines yet. Tap + to build your first routine — morning, night, workout, study, anything.</p>
       <button id="addRoutineBtn" class="fab" title="New routine">+</button>
     </section>
 
@@ -30,77 +29,86 @@
         <input id="routineNameInput" class="routine-name-input" placeholder="Routine name" maxlength="60">
         <button id="deleteRoutineBtn" class="icon-btn danger" title="Delete routine">🗑</button>
       </div>
-      <div id="exerciseList" class="exercise-list"></div>
-      <button id="addExerciseBtn" class="secondary-btn">+ Add Exercise</button>
-      <button id="startRoutineBtn" class="primary-btn">Start Workout</button>
+
+      <div class="icon-row">
+        <div class="icon-picker" id="iconPicker"></div>
+      </div>
+
+      <div id="stepList" class="step-list"></div>
+      <button id="addStepBtn" class="secondary-btn">+ Add Step</button>
+      <p id="editorTotalTime" class="total-time"></p>
+      <button id="startRoutineBtn" class="primary-btn">Start Routine</button>
     </section>
 
     <!-- SESSION / RUN VIEW -->
     <section id="view-session" class="view">
       <div class="session-header">
-        <button class="icon-btn" id="endSessionBtn" title="End workout">✕</button>
-        <span id="sessionTimer" class="session-timer">00:00</span>
-        <span class="session-spacer"></span>
+        <button class="icon-btn" id="endSessionBtn" title="End routine">✕</button>
+        <span id="sessionElapsed" class="session-timer">00:00</span>
+        <button class="icon-btn" id="pauseSessionBtn" title="Pause">⏸</button>
       </div>
 
       <div class="session-body">
         <p class="session-progress" id="sessionProgress"></p>
-        <h2 id="sessionExerciseName">Exercise</h2>
-        <p id="sessionSetInfo" class="session-set-info"></p>
+        <div class="step-icon" id="sessionStepIcon">⏱</div>
+        <h2 id="sessionStepName">Step</h2>
 
-        <div id="restOverlay" class="rest-overlay hidden">
-          <p class="rest-label">Rest</p>
-          <div id="restCountdown" class="rest-countdown">60</div>
-          <div class="rest-controls">
-            <button id="restMinus" class="chip-btn">-15s</button>
-            <button id="restPlus" class="chip-btn">+15s</button>
-          </div>
-          <button id="skipRestBtn" class="secondary-btn">Skip Rest</button>
+        <div class="step-countdown" id="stepCountdown">00:00</div>
+        <div class="progress-ring-wrap">
+          <svg viewBox="0 0 120 120" class="progress-ring">
+            <circle cx="60" cy="60" r="54" class="ring-bg"></circle>
+            <circle cx="60" cy="60" r="54" class="ring-fg" id="ringFg"></circle>
+          </svg>
         </div>
 
-        <div id="activeSetControls" class="active-set-controls">
-          <label>Weight (kg)</label>
-          <input id="setWeightInput" type="number" inputmode="decimal" min="0" step="0.5">
-          <label>Reps</label>
-          <input id="setRepsInput" type="number" inputmode="numeric" min="0" step="1">
-          <button id="completeSetBtn" class="primary-btn">Complete Set</button>
+        <div id="checklistControls" class="checklist-controls hidden">
+          <p class="checklist-hint">Mark this step done when you're ready</p>
+          <button id="completeStepBtn" class="primary-btn">Mark Done</button>
         </div>
       </div>
 
       <div class="session-footer">
-        <button id="prevSetBtn" class="icon-btn">‹ Prev</button>
-        <button id="nextSetBtn" class="icon-btn">Skip ›</button>
+        <button id="prevStepBtn" class="icon-btn">‹ Prev</button>
+        <button id="skipStepBtn" class="icon-btn">Skip ›</button>
       </div>
     </section>
 
     <!-- SESSION SUMMARY VIEW -->
     <section id="view-summary" class="view">
       <div class="summary-card">
-        <h2>Workout Complete 🎉</h2>
+        <h2>Routine Complete 🎉</h2>
         <p id="summaryDuration"></p>
-        <p id="summaryVolume"></p>
-        <p id="summarySets"></p>
+        <p id="summarySteps"></p>
         <button id="summaryDoneBtn" class="primary-btn">Done</button>
       </div>
     </section>
 
   </main>
 
-  <!-- ADD/EDIT EXERCISE MODAL -->
-  <div id="exerciseModal" class="modal hidden">
+  <!-- ADD/EDIT STEP MODAL -->
+  <div id="stepModal" class="modal hidden">
     <div class="modal-content">
-      <h3>Exercise</h3>
+      <h3>Step</h3>
       <label>Name</label>
-      <input id="exNameInput" type="text" placeholder="e.g. Bench Press">
-      <label>Sets</label>
-      <input id="exSetsInput" type="number" min="1" step="1" value="3">
-      <label>Reps per set</label>
-      <input id="exRepsInput" type="number" min="1" step="1" value="10">
-      <label>Rest between sets (seconds)</label>
-      <input id="exRestInput" type="number" min="0" step="5" value="60">
+      <input id="stepNameInput" type="text" placeholder="e.g. Meditate, Stretch, Journal">
+
+      <label>Type</label>
+      <div class="segmented" id="stepTypeSegmented">
+        <button type="button" data-type="timer" class="seg-btn active">Timer</button>
+        <button type="button" data-type="checklist" class="seg-btn">Checklist (no timer)</button>
+      </div>
+
+      <div id="stepDurationGroup">
+        <label>Duration</label>
+        <div class="duration-row">
+          <input id="stepMinInput" type="number" min="0" step="1" value="1"><span>min</span>
+          <input id="stepSecInput" type="number" min="0" max="59" step="1" value="0"><span>sec</span>
+        </div>
+      </div>
+
       <div class="modal-actions">
-        <button id="exCancelBtn" class="secondary-btn">Cancel</button>
-        <button id="exSaveBtn" class="primary-btn">Save</button>
+        <button id="stepCancelBtn" class="secondary-btn">Cancel</button>
+        <button id="stepSaveBtn" class="primary-btn">Save</button>
       </div>
     </div>
   </div>

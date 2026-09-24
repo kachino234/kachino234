@@ -1,22 +1,24 @@
 (() => {
   "use strict";
 
-  const STORAGE_KEY = "routinery_routines_v1";
+  const STORAGE_KEY = "routinery_routines_v2";
+  const ICONS = ["☀️", "🌙", "💪", "🧘", "📚", "💧", "🪥", "☕", "🧴", "📝", "🏃", "🍳", "🧹", "💼", "🎯"];
+  const RING_CIRCUMFERENCE = 2 * Math.PI * 54;
 
-  /** @typedef {{id:string,name:string,sets:number,reps:number,rest:number}} Exercise */
-  /** @typedef {{id:string,name:string,exercises:Exercise[]}} Routine */
+  /** @typedef {{id:string,name:string,type:'timer'|'checklist',duration:number}} Step */
+  /** @typedef {{id:string,name:string,icon:string,steps:Step[]}} Routine */
 
   let routines = loadRoutines();
   let editingRoutineId = null;
-  let editingExerciseId = null; // null = new exercise
+  let editingStepId = null; // null = new step
+  let selectedIcon = ICONS[0];
+  let selectedStepType = "timer";
 
-  // Session state
   let session = null;
   /*
   session = {
-    routine, flatSets: [{exerciseIndex, setIndex, exercise}], currentIndex,
-    startTime, elapsedTimer, totalVolume, completedSets,
-    resting: bool, restRemaining, restTimer, restTotal
+    routine, currentIndex, startTime, elapsedTimer,
+    stepRemaining, stepDuration, stepTimer, paused, completedSteps
   }
   */
 
@@ -35,13 +37,23 @@
   function uid() {
     return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
   }
+  function escapeHtml(str) {
+    const d = document.createElement("div");
+    d.textContent = str;
+    return d.innerHTML;
+  }
+  function formatTime(totalSeconds) {
+    totalSeconds = Math.max(0, Math.round(totalSeconds));
+    const m = Math.floor(totalSeconds / 60).toString().padStart(2, "0");
+    const s = Math.floor(totalSeconds % 60).toString().padStart(2, "0");
+    return `${m}:${s}`;
+  }
 
   // ---------- View management ----------
   function showView(id) {
     document.querySelectorAll(".view").forEach(v => v.classList.remove("active"));
     document.getElementById(id).classList.add("active");
   }
-
   document.querySelectorAll("[data-back]").forEach(btn => {
     btn.addEventListener("click", () => showView(btn.dataset.back));
   });
@@ -50,28 +62,30 @@
   const routineListEl = document.getElementById("routineList");
   const emptyStateEl = document.getElementById("emptyState");
 
+  function totalDuration(routine) {
+    return routine.steps.reduce((sum, s) => sum + (s.type === "timer" ? s.duration : 0), 0);
+  }
+
   function renderRoutineList() {
     routineListEl.innerHTML = "";
     emptyStateEl.classList.toggle("hidden", routines.length > 0);
     routines.forEach(r => {
       const card = document.createElement("div");
       card.className = "routine-card";
-      const totalSets = r.exercises.reduce((s, e) => s + Number(e.sets), 0);
-      card.innerHTML = `<h3>${escapeHtml(r.name || "Untitled routine")}</h3>
-        <p>${r.exercises.length} exercise${r.exercises.length === 1 ? "" : "s"} · ${totalSets} sets</p>`;
+      const mins = Math.round(totalDuration(r) / 60);
+      const timeLabel = mins > 0 ? `${mins} min · ` : "";
+      card.innerHTML = `<span class="emoji">${r.icon || "🎯"}</span>
+        <div class="body">
+          <h3>${escapeHtml(r.name || "Untitled routine")}</h3>
+          <p>${timeLabel}${r.steps.length} step${r.steps.length === 1 ? "" : "s"}</p>
+        </div>`;
       card.addEventListener("click", () => openEditor(r.id));
       routineListEl.appendChild(card);
     });
   }
 
-  function escapeHtml(str) {
-    const d = document.createElement("div");
-    d.textContent = str;
-    return d.innerHTML;
-  }
-
   document.getElementById("addRoutineBtn").addEventListener("click", () => {
-    const r = { id: uid(), name: "", exercises: [] };
+    const r = { id: uid(), name: "", icon: ICONS[0], steps: [] };
     routines.push(r);
     saveRoutines();
     openEditor(r.id);
@@ -79,17 +93,37 @@
 
   // ---------- Editor ----------
   const routineNameInput = document.getElementById("routineNameInput");
-  const exerciseListEl = document.getElementById("exerciseList");
+  const stepListEl = document.getElementById("stepList");
+  const iconPickerEl = document.getElementById("iconPicker");
+  const editorTotalTimeEl = document.getElementById("editorTotalTime");
 
   function currentRoutine() {
     return routines.find(r => r.id === editingRoutineId);
+  }
+
+  function renderIconPicker() {
+    const r = currentRoutine();
+    iconPickerEl.innerHTML = "";
+    ICONS.forEach(icon => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.textContent = icon;
+      btn.className = icon === (r && r.icon) ? "selected" : "";
+      btn.addEventListener("click", () => {
+        r.icon = icon;
+        saveRoutines();
+        renderIconPicker();
+      });
+      iconPickerEl.appendChild(btn);
+    });
   }
 
   function openEditor(routineId) {
     editingRoutineId = routineId;
     const r = currentRoutine();
     routineNameInput.value = r.name || "";
-    renderExerciseList();
+    renderIconPicker();
+    renderStepList();
     showView("view-editor");
   }
 
@@ -100,30 +134,50 @@
     saveRoutines();
   });
 
-  function renderExerciseList() {
+  function renderStepList() {
     const r = currentRoutine();
-    exerciseListEl.innerHTML = "";
+    stepListEl.innerHTML = "";
     if (!r) return;
-    r.exercises.forEach((ex, idx) => {
+    r.steps.forEach((step, idx) => {
       const card = document.createElement("div");
-      card.className = "exercise-card";
+      card.className = "step-card";
+      const desc = step.type === "timer" ? formatTime(step.duration) : "Checklist step";
       card.innerHTML = `
+        <span class="order">${idx + 1}</span>
         <div class="info">
-          <h4>${escapeHtml(ex.name)}</h4>
-          <p>${ex.sets} sets × ${ex.reps} reps · ${ex.rest}s rest</p>
+          <h4>${escapeHtml(step.name)}</h4>
+          <p>${desc}</p>
         </div>
         <div class="actions">
+          <button data-action="up" title="Move up">↑</button>
+          <button data-action="down" title="Move down">↓</button>
           <button data-action="edit" title="Edit">✎</button>
           <button data-action="delete" title="Delete">✕</button>
         </div>`;
-      card.querySelector('[data-action="edit"]').addEventListener("click", () => openExerciseModal(ex.id));
+      card.querySelector('[data-action="edit"]').addEventListener("click", () => openStepModal(step.id));
       card.querySelector('[data-action="delete"]').addEventListener("click", () => {
-        r.exercises.splice(idx, 1);
+        r.steps.splice(idx, 1);
         saveRoutines();
-        renderExerciseList();
+        renderStepList();
       });
-      exerciseListEl.appendChild(card);
+      card.querySelector('[data-action="up"]').addEventListener("click", () => {
+        if (idx === 0) return;
+        [r.steps[idx - 1], r.steps[idx]] = [r.steps[idx], r.steps[idx - 1]];
+        saveRoutines();
+        renderStepList();
+      });
+      card.querySelector('[data-action="down"]').addEventListener("click", () => {
+        if (idx === r.steps.length - 1) return;
+        [r.steps[idx + 1], r.steps[idx]] = [r.steps[idx], r.steps[idx + 1]];
+        saveRoutines();
+        renderStepList();
+      });
+      stepListEl.appendChild(card);
     });
+    const mins = Math.round(totalDuration(r) / 60);
+    editorTotalTimeEl.textContent = r.steps.length
+      ? `Total time: ${mins > 0 ? mins + " min" : "< 1 min"}`
+      : "";
   }
 
   document.getElementById("deleteRoutineBtn").addEventListener("click", () => {
@@ -137,218 +191,200 @@
 
   document.getElementById("startRoutineBtn").addEventListener("click", () => {
     const r = currentRoutine();
-    if (!r || r.exercises.length === 0) {
-      alert("Add at least one exercise before starting.");
+    if (!r || r.steps.length === 0) {
+      alert("Add at least one step before starting.");
       return;
     }
     startSession(r);
   });
 
-  // ---------- Exercise modal ----------
-  const exerciseModal = document.getElementById("exerciseModal");
-  const exNameInput = document.getElementById("exNameInput");
-  const exSetsInput = document.getElementById("exSetsInput");
-  const exRepsInput = document.getElementById("exRepsInput");
-  const exRestInput = document.getElementById("exRestInput");
+  // ---------- Step modal ----------
+  const stepModal = document.getElementById("stepModal");
+  const stepNameInput = document.getElementById("stepNameInput");
+  const stepMinInput = document.getElementById("stepMinInput");
+  const stepSecInput = document.getElementById("stepSecInput");
+  const stepDurationGroup = document.getElementById("stepDurationGroup");
+  const stepTypeSegmented = document.getElementById("stepTypeSegmented");
 
-  document.getElementById("addExerciseBtn").addEventListener("click", () => openExerciseModal(null));
+  document.getElementById("addStepBtn").addEventListener("click", () => openStepModal(null));
 
-  function openExerciseModal(exerciseId) {
-    editingExerciseId = exerciseId;
-    const r = currentRoutine();
-    if (exerciseId) {
-      const ex = r.exercises.find(e => e.id === exerciseId);
-      exNameInput.value = ex.name;
-      exSetsInput.value = ex.sets;
-      exRepsInput.value = ex.reps;
-      exRestInput.value = ex.rest;
-    } else {
-      exNameInput.value = "";
-      exSetsInput.value = 3;
-      exRepsInput.value = 10;
-      exRestInput.value = 60;
-    }
-    exerciseModal.classList.remove("hidden");
-    exNameInput.focus();
-  }
-
-  document.getElementById("exCancelBtn").addEventListener("click", () => {
-    exerciseModal.classList.add("hidden");
+  stepTypeSegmented.querySelectorAll(".seg-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      selectedStepType = btn.dataset.type;
+      stepTypeSegmented.querySelectorAll(".seg-btn").forEach(b => b.classList.toggle("active", b === btn));
+      stepDurationGroup.classList.toggle("hidden", selectedStepType === "checklist");
+    });
   });
 
-  document.getElementById("exSaveBtn").addEventListener("click", () => {
-    const name = exNameInput.value.trim();
-    if (!name) { alert("Exercise name is required."); return; }
-    const sets = Math.max(1, parseInt(exSetsInput.value, 10) || 1);
-    const reps = Math.max(1, parseInt(exRepsInput.value, 10) || 1);
-    const rest = Math.max(0, parseInt(exRestInput.value, 10) || 0);
+  function openStepModal(stepId) {
+    editingStepId = stepId;
     const r = currentRoutine();
-    if (editingExerciseId) {
-      const ex = r.exercises.find(e => e.id === editingExerciseId);
-      Object.assign(ex, { name, sets, reps, rest });
+    if (stepId) {
+      const step = r.steps.find(s => s.id === stepId);
+      stepNameInput.value = step.name;
+      selectedStepType = step.type;
+      stepMinInput.value = Math.floor(step.duration / 60);
+      stepSecInput.value = step.duration % 60;
     } else {
-      r.exercises.push({ id: uid(), name, sets, reps, rest });
+      stepNameInput.value = "";
+      selectedStepType = "timer";
+      stepMinInput.value = 1;
+      stepSecInput.value = 0;
+    }
+    stepTypeSegmented.querySelectorAll(".seg-btn").forEach(b => b.classList.toggle("active", b.dataset.type === selectedStepType));
+    stepDurationGroup.classList.toggle("hidden", selectedStepType === "checklist");
+    stepModal.classList.remove("hidden");
+    stepNameInput.focus();
+  }
+
+  document.getElementById("stepCancelBtn").addEventListener("click", () => {
+    stepModal.classList.add("hidden");
+  });
+
+  document.getElementById("stepSaveBtn").addEventListener("click", () => {
+    const name = stepNameInput.value.trim();
+    if (!name) { alert("Step name is required."); return; }
+    const mins = Math.max(0, parseInt(stepMinInput.value, 10) || 0);
+    const secs = Math.max(0, Math.min(59, parseInt(stepSecInput.value, 10) || 0));
+    const duration = selectedStepType === "timer" ? Math.max(1, mins * 60 + secs) : 0;
+    const r = currentRoutine();
+    if (editingStepId) {
+      const step = r.steps.find(s => s.id === editingStepId);
+      Object.assign(step, { name, type: selectedStepType, duration });
+    } else {
+      r.steps.push({ id: uid(), name, type: selectedStepType, duration });
     }
     saveRoutines();
-    renderExerciseList();
-    exerciseModal.classList.add("hidden");
+    renderStepList();
+    stepModal.classList.add("hidden");
   });
 
   // ---------- Session runner ----------
-  const sessionTimerEl = document.getElementById("sessionTimer");
+  const sessionElapsedEl = document.getElementById("sessionElapsed");
   const sessionProgressEl = document.getElementById("sessionProgress");
-  const sessionExerciseNameEl = document.getElementById("sessionExerciseName");
-  const sessionSetInfoEl = document.getElementById("sessionSetInfo");
-  const restOverlay = document.getElementById("restOverlay");
-  const restCountdownEl = document.getElementById("restCountdown");
-  const activeSetControls = document.getElementById("activeSetControls");
-  const setWeightInput = document.getElementById("setWeightInput");
-  const setRepsInput = document.getElementById("setRepsInput");
+  const sessionStepNameEl = document.getElementById("sessionStepName");
+  const sessionStepIconEl = document.getElementById("sessionStepIcon");
+  const stepCountdownEl = document.getElementById("stepCountdown");
+  const ringFg = document.getElementById("ringFg");
+  const checklistControls = document.getElementById("checklistControls");
+  const pauseBtn = document.getElementById("pauseSessionBtn");
 
-  function buildFlatSets(routine) {
-    const flat = [];
-    routine.exercises.forEach((ex, exIdx) => {
-      for (let s = 0; s < ex.sets; s++) {
-        flat.push({ exerciseIndex: exIdx, setNumber: s + 1, exercise: ex });
-      }
-    });
-    return flat;
-  }
+  ringFg.style.strokeDasharray = `${RING_CIRCUMFERENCE}`;
 
   function startSession(routine) {
     session = {
       routine,
-      flatSets: buildFlatSets(routine),
       currentIndex: 0,
       startTime: Date.now(),
       elapsedTimer: null,
-      totalVolume: 0,
-      completedSets: 0,
-      resting: false,
-      restRemaining: 0,
-      restTimer: null,
+      stepTimer: null,
+      stepRemaining: 0,
+      stepDuration: 0,
+      paused: false,
+      completedSteps: 0,
     };
     showView("view-session");
+    pauseBtn.textContent = "⏸";
     session.elapsedTimer = setInterval(updateElapsedTime, 1000);
     updateElapsedTime();
-    renderCurrentSet();
+    renderCurrentStep();
   }
 
   function updateElapsedTime() {
     if (!session) return;
-    const secs = Math.floor((Date.now() - session.startTime) / 1000);
-    sessionTimerEl.textContent = formatTime(secs);
+    sessionElapsedEl.textContent = formatTime((Date.now() - session.startTime) / 1000);
   }
 
-  function formatTime(totalSeconds) {
-    const m = Math.floor(totalSeconds / 60).toString().padStart(2, "0");
-    const s = Math.floor(totalSeconds % 60).toString().padStart(2, "0");
-    return `${m}:${s}`;
+  function updateRing() {
+    if (session.stepDuration <= 0) {
+      ringFg.style.strokeDashoffset = "0";
+      return;
+    }
+    const frac = session.stepRemaining / session.stepDuration;
+    ringFg.style.strokeDashoffset = `${RING_CIRCUMFERENCE * (1 - frac)}`;
   }
 
-  function renderCurrentSet() {
+  function renderCurrentStep() {
     if (!session) return;
-    const cur = session.flatSets[session.currentIndex];
-    if (!cur) { finishSession(); return; }
-    sessionProgressEl.textContent = `Set ${session.currentIndex + 1} of ${session.flatSets.length}`;
-    sessionExerciseNameEl.textContent = cur.exercise.name;
-    sessionSetInfoEl.textContent = `Set ${cur.setNumber} of ${cur.exercise.sets} · Target ${cur.exercise.reps} reps`;
-    setWeightInput.value = "";
-    setRepsInput.value = cur.exercise.reps;
-    restOverlay.classList.add("hidden");
-    activeSetControls.classList.remove("hidden");
-  }
+    clearStepTimer();
+    const step = session.routine.steps[session.currentIndex];
+    if (!step) { finishSession(); return; }
 
-  document.getElementById("completeSetBtn").addEventListener("click", () => {
-    if (!session) return;
-    const cur = session.flatSets[session.currentIndex];
-    const weight = parseFloat(setWeightInput.value) || 0;
-    const reps = parseInt(setRepsInput.value, 10) || 0;
-    session.totalVolume += weight * reps;
-    session.completedSets += 1;
+    sessionProgressEl.textContent = `Step ${session.currentIndex + 1} of ${session.routine.steps.length}`;
+    sessionStepNameEl.textContent = step.name;
+    sessionStepIconEl.textContent = session.routine.icon || "⏱";
 
-    const isLast = session.currentIndex === session.flatSets.length - 1;
-    const restSeconds = cur.exercise.rest;
-    session.currentIndex += 1;
-
-    if (!isLast && restSeconds > 0) {
-      startRest(restSeconds);
+    if (step.type === "checklist") {
+      checklistControls.classList.remove("hidden");
+      stepCountdownEl.textContent = "✓";
+      ringFg.style.strokeDashoffset = `${RING_CIRCUMFERENCE}`;
+      pauseBtn.classList.add("hidden");
     } else {
-      renderCurrentSet();
+      checklistControls.classList.add("hidden");
+      pauseBtn.classList.remove("hidden");
+      session.stepDuration = step.duration;
+      session.stepRemaining = step.duration;
+      stepCountdownEl.textContent = formatTime(session.stepRemaining);
+      updateRing();
+      session.stepTimer = setInterval(tickStep, 1000);
     }
-  });
+  }
 
-  document.getElementById("nextSetBtn").addEventListener("click", () => {
+  function tickStep() {
+    if (!session || session.paused) return;
+    session.stepRemaining -= 1;
+    stepCountdownEl.textContent = formatTime(session.stepRemaining);
+    updateRing();
+    if (session.stepRemaining <= 0) {
+      advanceStep();
+    }
+  }
+
+  function clearStepTimer() {
+    if (session && session.stepTimer) {
+      clearInterval(session.stepTimer);
+      session.stepTimer = null;
+    }
+  }
+
+  function advanceStep() {
     if (!session) return;
-    clearRest();
+    session.completedSteps += 1;
     session.currentIndex += 1;
-    renderCurrentSet();
-  });
+    renderCurrentStep();
+  }
 
-  document.getElementById("prevSetBtn").addEventListener("click", () => {
+  document.getElementById("completeStepBtn").addEventListener("click", advanceStep);
+
+  document.getElementById("skipStepBtn").addEventListener("click", () => {
     if (!session) return;
-    clearRest();
+    session.currentIndex += 1;
+    renderCurrentStep();
+  });
+
+  document.getElementById("prevStepBtn").addEventListener("click", () => {
+    if (!session) return;
     session.currentIndex = Math.max(0, session.currentIndex - 1);
-    renderCurrentSet();
+    renderCurrentStep();
   });
 
-  function startRest(seconds) {
-    session.resting = true;
-    session.restRemaining = seconds;
-    session.restTotal = seconds;
-    activeSetControls.classList.add("hidden");
-    restOverlay.classList.remove("hidden");
-    restCountdownEl.textContent = session.restRemaining;
-    session.restTimer = setInterval(() => {
-      session.restRemaining -= 1;
-      if (session.restRemaining <= 0) {
-        clearRest();
-        renderCurrentSet();
-      } else {
-        restCountdownEl.textContent = session.restRemaining;
-      }
-    }, 1000);
-  }
-
-  function clearRest() {
-    if (session && session.restTimer) {
-      clearInterval(session.restTimer);
-      session.restTimer = null;
-    }
-    if (session) session.resting = false;
-  }
-
-  document.getElementById("restPlus").addEventListener("click", () => {
-    if (session && session.resting) {
-      session.restRemaining += 15;
-      restCountdownEl.textContent = session.restRemaining;
-    }
-  });
-  document.getElementById("restMinus").addEventListener("click", () => {
-    if (session && session.resting) {
-      session.restRemaining = Math.max(1, session.restRemaining - 15);
-      restCountdownEl.textContent = session.restRemaining;
-    }
-  });
-  document.getElementById("skipRestBtn").addEventListener("click", () => {
-    if (session) {
-      clearRest();
-      renderCurrentSet();
-    }
+  pauseBtn.addEventListener("click", () => {
+    if (!session) return;
+    session.paused = !session.paused;
+    pauseBtn.textContent = session.paused ? "▶" : "⏸";
   });
 
   document.getElementById("endSessionBtn").addEventListener("click", () => {
-    if (confirm("End this workout?")) finishSession();
+    if (confirm("End this routine?")) finishSession();
   });
 
   function finishSession() {
     if (!session) return;
     clearInterval(session.elapsedTimer);
-    clearRest();
-    const elapsed = Math.floor((Date.now() - session.startTime) / 1000);
+    clearStepTimer();
+    const elapsed = (Date.now() - session.startTime) / 1000;
     document.getElementById("summaryDuration").textContent = `Duration: ${formatTime(elapsed)}`;
-    document.getElementById("summaryVolume").textContent = `Total volume: ${session.totalVolume.toFixed(1)} kg`;
-    document.getElementById("summarySets").textContent = `Sets completed: ${session.completedSets}`;
+    document.getElementById("summarySteps").textContent = `Steps completed: ${session.completedSteps} of ${session.routine.steps.length}`;
     session = null;
     showView("view-summary");
   }
