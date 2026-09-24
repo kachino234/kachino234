@@ -269,5 +269,30 @@ body {
   margin-bottom: 16px;
 }
 .auth-status { color: var(--accent-2); font-size: 14px; min-height: 20px; margin: 12px 0 0; text-align: center; }
+.auth-status.error { color: var(--danger); }
+
+.google-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 13px;
+  border-radius: var(--radius);
+  background: #fff;
+  border: 1px solid var(--border);
+  color: #1f1f1f;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  margin-bottom: 16px;
+}
+.google-btn:active { transform: scale(0.99); }
+
+.auth-divider { display: flex; align-items: center; text-align: center; color: var(--text-dim); font-size: 13px; margin: 4px 0 16px; }
+.auth-divider::before, .auth-divider::after { content: ""; flex: 1; border-bottom: 1px solid var(--border); }
+.auth-divider span { padding: 0 10px; }
+
+#authModeSegmented { margin-bottom: 16px; }
 
 .hidden { display: none !important; }

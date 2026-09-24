@@ -41,19 +41,62 @@
   });
 
   // ---------- Auth ----------
+  const SITE_URL = window.location.origin + window.location.pathname;
   const authEmailInput = document.getElementById("authEmailInput");
+  const authPasswordInput = document.getElementById("authPasswordInput");
   const authStatus = document.getElementById("authStatus");
+  const authTitle = document.getElementById("authTitle");
+  const authSubmitBtn = document.getElementById("authSubmitBtn");
+  const authModeSegmented = document.getElementById("authModeSegmented");
   const signOutBtn = document.getElementById("signOutBtn");
+  let authMode = "signin";
 
-  document.getElementById("authSendBtn").addEventListener("click", async () => {
-    const email = authEmailInput.value.trim();
-    if (!email) { authStatus.textContent = "Enter a valid email."; return; }
-    authStatus.textContent = "Sending...";
-    const { error } = await sb.auth.signInWithOtp({
-      email,
-      options: { emailRedirectTo: window.location.href },
+  function setAuthStatus(message, isError) {
+    authStatus.textContent = message || "";
+    authStatus.classList.toggle("error", !!isError);
+  }
+
+  authModeSegmented.querySelectorAll(".seg-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      authMode = btn.dataset.mode;
+      authModeSegmented.querySelectorAll(".seg-btn").forEach(b => b.classList.toggle("active", b === btn));
+      authTitle.textContent = authMode === "signup" ? "Create account" : "Sign in";
+      authSubmitBtn.textContent = authMode === "signup" ? "Sign Up" : "Sign In";
+      setAuthStatus("", false);
     });
-    authStatus.textContent = error ? `Error: ${error.message}` : "Check your email for the magic link.";
+  });
+
+  document.getElementById("googleAuthBtn").addEventListener("click", async () => {
+    setAuthStatus("Redirecting to Google...", false);
+    const { error } = await sb.auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo: SITE_URL },
+    });
+    if (error) setAuthStatus(`Error: ${error.message}`, true);
+  });
+
+  authSubmitBtn.addEventListener("click", async () => {
+    const email = authEmailInput.value.trim();
+    const password = authPasswordInput.value;
+    if (!email || !password) { setAuthStatus("Enter both email and password.", true); return; }
+    if (password.length < 6) { setAuthStatus("Password must be at least 6 characters.", true); return; }
+
+    setAuthStatus(authMode === "signup" ? "Creating account..." : "Signing in...", false);
+
+    if (authMode === "signup") {
+      const { data, error } = await sb.auth.signUp({
+        email,
+        password,
+        options: { emailRedirectTo: SITE_URL },
+      });
+      if (error) { setAuthStatus(`Error: ${error.message}`, true); return; }
+      if (!data.session) {
+        setAuthStatus("Account created. Check your email to confirm before signing in.", false);
+      }
+    } else {
+      const { error } = await sb.auth.signInWithPassword({ email, password });
+      if (error) { setAuthStatus(`Error: ${error.message}`, true); return; }
+    }
   });
 
   signOutBtn.addEventListener("click", async () => {
