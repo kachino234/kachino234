@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Routinery — Workout Routine Builder</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div id="app">
+
+  <!-- Bottom nav shell -->
+  <header class="topbar">
+    <h1 id="topbarTitle">Routines</h1>
+  </header>
+
+  <main id="views">
+
+    <!-- ROUTINES LIST VIEW -->
+    <section id="view-routines" class="view active">
+      <div id="routineList" class="routine-list"></div>
+      <p id="emptyState" class="empty-state">No routines yet. Tap + to create your first workout routine.</p>
+      <button id="addRoutineBtn" class="fab" title="New routine">+</button>
+    </section>
+
+    <!-- ROUTINE EDITOR VIEW -->
+    <section id="view-editor" class="view">
+      <div class="editor-header">
+        <button class="icon-btn back-btn" data-back="view-routines">&larr;</button>
+        <input id="routineNameInput" class="routine-name-input" placeholder="Routine name" maxlength="60">
+        <button id="deleteRoutineBtn" class="icon-btn danger" title="Delete routine">🗑</button>
+      </div>
+      <div id="exerciseList" class="exercise-list"></div>
+      <button id="addExerciseBtn" class="secondary-btn">+ Add Exercise</button>
+      <button id="startRoutineBtn" class="primary-btn">Start Workout</button>
+    </section>
+
+    <!-- SESSION / RUN VIEW -->
+    <section id="view-session" class="view">
+      <div class="session-header">
+        <button class="icon-btn" id="endSessionBtn" title="End workout">✕</button>
+        <span id="sessionTimer" class="session-timer">00:00</span>
+        <span class="session-spacer"></span>
+      </div>
+
+      <div class="session-body">
+        <p class="session-progress" id="sessionProgress"></p>
+        <h2 id="sessionExerciseName">Exercise</h2>
+        <p id="sessionSetInfo" class="session-set-info"></p>
+
+        <div id="restOverlay" class="rest-overlay hidden">
+          <p class="rest-label">Rest</p>
+          <div id="restCountdown" class="rest-countdown">60</div>
+          <div class="rest-controls">
+            <button id="restMinus" class="chip-btn">-15s</button>
+            <button id="restPlus" class="chip-btn">+15s</button>
+          </div>
+          <button id="skipRestBtn" class="secondary-btn">Skip Rest</button>
+        </div>
+
+        <div id="activeSetControls" class="active-set-controls">
+          <label>Weight (kg)</label>
+          <input id="setWeightInput" type="number" inputmode="decimal" min="0" step="0.5">
+          <label>Reps</label>
+          <input id="setRepsInput" type="number" inputmode="numeric" min="0" step="1">
+          <button id="completeSetBtn" class="primary-btn">Complete Set</button>
+        </div>
+      </div>
+
+      <div class="session-footer">
+        <button id="prevSetBtn" class="icon-btn">‹ Prev</button>
+        <button id="nextSetBtn" class="icon-btn">Skip ›</button>
+      </div>
+    </section>
+
+    <!-- SESSION SUMMARY VIEW -->
+    <section id="view-summary" class="view">
+      <div class="summary-card">
+        <h2>Workout Complete 🎉</h2>
+        <p id="summaryDuration"></p>
+        <p id="summaryVolume"></p>
+        <p id="summarySets"></p>
+        <button id="summaryDoneBtn" class="primary-btn">Done</button>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ADD/EDIT EXERCISE MODAL -->
+  <div id="exerciseModal" class="modal hidden">
+    <div class="modal-content">
+      <h3>Exercise</h3>
+      <label>Name</label>
+      <input id="exNameInput" type="text" placeholder="e.g. Bench Press">
+      <label>Sets</label>
+      <input id="exSetsInput" type="number" min="1" step="1" value="3">
+      <label>Reps per set</label>
+      <input id="exRepsInput" type="number" min="1" step="1" value="10">
+      <label>Rest between sets (seconds)</label>
+      <input id="exRestInput" type="number" min="0" step="5" value="60">
+      <div class="modal-actions">
+        <button id="exCancelBtn" class="secondary-btn">Cancel</button>
+        <button id="exSaveBtn" class="primary-btn">Save</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+<script src="app.js"></script>
+</body>
+</html>
